@@ -102,7 +102,7 @@ final class AppSettings: ObservableObject {
     }
 
     // MARK: Layout
-    @AppStorage("landscapeLayout") private var landscapeLayoutRaw = ScreenLayout.sideBySide.rawValue { willSet { objectWillChange.send() } }
+    @AppStorage("landscapeLayout") private var landscapeLayoutRaw = ScreenLayout.stacked.rawValue { willSet { objectWillChange.send() } }
     @AppStorage("swapScreens") var swapScreens = false { willSet { objectWillChange.send() } }
     var landscapeLayout: ScreenLayout {
         get { ScreenLayout(rawValue: landscapeLayoutRaw) ?? .sideBySide }
@@ -182,7 +182,8 @@ final class AppSettings: ObservableObject {
 
         [Layout]
         layout_option = \(landscapeLayout.coreValue)
-        portrait_layout_option = 0
+        portrait_layout_option = 2
+        screen_gap = 12
         swap_screen = \(swapScreens)
 
         [Audio]

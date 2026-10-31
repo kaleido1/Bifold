@@ -296,6 +296,8 @@ final class VirtualControllerView: UIView {
         super.layoutSubviews()
         let b = bounds.inset(by: safeAreaInsets)
         let landscape = bounds.width > bounds.height
+        let tablet = traitCollection.userInterfaceIdiom == .pad
+        let portraitTablet = tablet && !landscape
         let unit = min(max(min(bounds.width, bounds.height) / 8.0, 40), 64) // base button size
 
         func place(_ label: Kind, _ rect: CGRect) {
@@ -308,35 +310,67 @@ final class VirtualControllerView: UIView {
         let margin = unit * 0.35
 
         // Face buttons diamond centred at (cx, cy).
-        func faceButtons(cx: CGFloat, cy: CGFloat) {
-            let d = face * 1.05
-            place(.button(AZ_BUTTON_X), CGRect(x: cx - face / 2, y: cy - d - face / 2, width: face, height: face))
-            place(.button(AZ_BUTTON_B), CGRect(x: cx - face / 2, y: cy + d - face / 2, width: face, height: face))
-            place(.button(AZ_BUTTON_Y), CGRect(x: cx - d - face / 2, y: cy - face / 2, width: face, height: face))
-            place(.button(AZ_BUTTON_A), CGRect(x: cx + d - face / 2, y: cy - face / 2, width: face, height: face))
+        func faceButtons(cx: CGFloat, cy: CGFloat, size: CGFloat) {
+            let d = size * 1.05
+            place(.button(AZ_BUTTON_X), CGRect(x: cx - size / 2, y: cy - d - size / 2, width: size, height: size))
+            place(.button(AZ_BUTTON_B), CGRect(x: cx - size / 2, y: cy + d - size / 2, width: size, height: size))
+            place(.button(AZ_BUTTON_Y), CGRect(x: cx - d - size / 2, y: cy - size / 2, width: size, height: size))
+            place(.button(AZ_BUTTON_A), CGRect(x: cx + d - size / 2, y: cy - size / 2, width: size, height: size))
         }
 
-        if landscape {
-            // Controls hug the left and right edges, over the sides of the screens. The left
-            // group (circle pad above d-pad) sits low, where the thumb rests, but stays inside
-            // the safe area: in landscape the Dynamic Island occupies the side inset.
-            let leftX = b.minX + margin * 0.3 + unit * 0.4 - 8, rightX = b.maxX - margin
+        if landscape || tablet {
+            // Tablets keep the same edge-floating control layout in both orientations. This
+            // lets Azahar maximize the stacked screen pair against the full surface, while each
+            // hand keeps a consistent control group in the side margins.
+            let edgeInset = tablet ? max(margin * 0.3, 22) : margin * 0.3
+            let leftX = b.minX + edgeInset + (tablet ? 0 : unit * 0.4 - 8)
+            let rightX = b.maxX - max(margin, tablet ? 22 : margin)
             let lowY = bounds.maxY - max(safeAreaInsets.bottom * 0.5, margin * 0.5)
             let stick = pad * 0.78, dpadSize = pad * 0.72
-            // Both thumb groups are centred vertically on the screen.
+            // On iPad, anchor the thumb groups near the lower edge, where hands naturally rest.
+            // Keep the phone landscape layout centred vertically.
             let gap = margin * 1.2
-            let stickY = bounds.midY - (stick + gap + dpadSize) / 2
+            let clusterHeight = stick + gap + dpadSize
+            let stickY = tablet
+                ? b.maxY - max(margin * 0.45, 14) - clusterHeight
+                : bounds.midY - clusterHeight / 2
             place(.circlePad, CGRect(x: leftX, y: stickY, width: stick, height: stick))
             place(.dpad, CGRect(x: leftX + (stick - dpadSize) / 2, y: stickY + stick + gap, width: dpadSize, height: dpadSize))
-            faceButtons(cx: rightX - face * 1.55 + unit * 0.3 + 8, cy: bounds.midY)
-            let shoulderLeftX = b.minX + margin * 0.3
-            place(.button(AZ_BUTTON_L), CGRect(x: shoulderLeftX, y: b.minY + margin, width: shoulderW, height: shoulderH))
-            place(.button(AZ_BUTTON_ZL), CGRect(x: shoulderLeftX + shoulderW + margin, y: b.minY + margin, width: shoulderW * 0.8, height: shoulderH))
-            place(.button(AZ_BUTTON_R), CGRect(x: rightX - shoulderW, y: b.minY + margin, width: shoulderW, height: shoulderH))
-            place(.button(AZ_BUTTON_ZR), CGRect(x: rightX - shoulderW * 1.8 - margin, y: b.minY + margin, width: shoulderW * 0.8, height: shoulderH))
+            let faceX = rightX - face * 1.55 + unit * 0.3 + 8
+            if portraitTablet {
+                // Put the diamond below the touch screen without changing the screen size.
+                // The screen rectangles are in drawable pixels; convert them back to points.
+                var top = AZScreenRect(), bottom = AZScreenRect()
+                let displayScale = window?.screen.nativeScale ?? UIScreen.main.nativeScale
+                let screenBottom: CGFloat
+                if az_get_screen_rects(&top, &bottom) {
+                    screenBottom = CGFloat(max(top.y + top.height, bottom.y + bottom.height)) / displayScale
+                } else {
+                    screenBottom = bounds.minY + bounds.height * 0.85
+                }
+                let freeHeight = max(bounds.maxY - screenBottom, 0)
+                let portraitFace = min(face, max(36, freeHeight / 3.1))
+                let portraitFaceX = rightX - portraitFace * 1.55 + unit * 0.3 + 8
+                let faceY = min(screenBottom + portraitFace * 1.55,
+                                bounds.maxY - portraitFace * 1.55)
+                faceButtons(cx: min(portraitFaceX, b.maxX - edgeInset - portraitFace * 1.55),
+                            cy: faceY, size: portraitFace)
+            } else {
+                let faceY = tablet ? min(b.minY + b.height * 0.76, b.maxY - face * 1.6) : bounds.midY
+                faceButtons(cx: tablet ? min(faceX, b.maxX - edgeInset - face * 1.55) : faceX,
+                            cy: faceY, size: face)
+            }
+            let shoulderLeftX = b.minX + edgeInset
+            let shoulderY = b.minY + max(margin, tablet ? 24 : margin)
+            place(.button(AZ_BUTTON_L), CGRect(x: shoulderLeftX, y: shoulderY, width: shoulderW, height: shoulderH))
+            place(.button(AZ_BUTTON_ZL), CGRect(x: shoulderLeftX + shoulderW + margin, y: shoulderY, width: shoulderW * 0.8, height: shoulderH))
+            place(.button(AZ_BUTTON_R), CGRect(x: rightX - shoulderW, y: shoulderY, width: shoulderW, height: shoulderH))
+            place(.button(AZ_BUTTON_ZR), CGRect(x: rightX - shoulderW * 1.8 - margin, y: shoulderY, width: shoulderW * 0.8, height: shoulderH))
             let smallW = unit * 1.25, smallH = unit * 0.5
-            place(.button(AZ_BUTTON_SELECT), CGRect(x: rightX - smallW * 2 - margin, y: lowY - smallH, width: smallW, height: smallH))
-            place(.button(AZ_BUTTON_START), CGRect(x: rightX - smallW, y: lowY - smallH, width: smallW, height: smallH))
+            let menuX = portraitTablet ? bounds.midX - smallW - margin * 0.5 : rightX - smallW * 2 - margin
+            let startX = portraitTablet ? bounds.midX + margin * 0.5 : rightX - smallW
+            place(.button(AZ_BUTTON_SELECT), CGRect(x: menuX, y: lowY - smallH, width: smallW, height: smallH))
+            place(.button(AZ_BUTTON_START), CGRect(x: startX, y: lowY - smallH, width: smallW, height: smallH))
             place(.button(AZ_BUTTON_HOME), CGRect(x: leftX + stick + margin + unit * 0.6 - 22, y: lowY - smallH * 1.4, width: smallH * 1.4, height: smallH * 1.4))
         } else {
             // Portrait: screens fill the top (PortraitTopFullWidth), controls use the bottom.
@@ -361,7 +395,8 @@ final class VirtualControllerView: UIView {
             place(.circlePad, CGRect(x: leftX + (column - stick) / 2, y: controlsTop, width: stick, height: stick))
             place(.dpad, CGRect(x: leftX + (column - dpadSize) / 2, y: min(controlsTop + stick + margin * 0.6, b.maxY - dpadSize - margin),
                                 width: dpadSize, height: dpadSize))
-            faceButtons(cx: rightX - face * 1.55, cy: max(controlsTop + face * 1.6, areaMidY - face * 0.3))
+            faceButtons(cx: rightX - face * 1.55,
+                        cy: max(controlsTop + face * 1.6, areaMidY - face * 0.3), size: face)
             let smallW = unit * 1.1, smallH = unit * 0.5
             let centerX = (leftX + column + (rightX - face * 3.1)) / 2
             let bottomY = b.maxY - smallH - margin

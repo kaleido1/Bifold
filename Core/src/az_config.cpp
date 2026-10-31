@@ -42,7 +42,8 @@ factor_3d = 0
 
 [Layout]
 layout_option = 0
-portrait_layout_option = 0
+portrait_layout_option = 2
+screen_gap = 12
 swap_screen = false
 upright_screen = false
 large_screen_proportion = 4

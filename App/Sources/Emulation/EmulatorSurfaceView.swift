@@ -221,9 +221,8 @@ final class EmulatorSurfaceUIView: UIView {
     }
 }
 
-/// Lays out the game surface and the controller. Portrait: the surface gets the space above a
-/// control area at the bottom (the core scales both screens to fit it); landscape or with a
-/// physical controller: the surface fills the view and the controls float over its edges.
+/// Lays out the game surface and the controller. Phones reserve a bottom control area in
+/// portrait; iPads and landscape phones keep the surface full-size with controls overlaid at edges.
 final class EmulatorContainerView: UIView {
     let surface = EmulatorSurfaceUIView()
     let pad = VirtualControllerView()
@@ -240,7 +239,8 @@ final class EmulatorContainerView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         let portrait = bounds.height > bounds.width
-        if portrait && !pad.isHidden {
+        let tablet = traitCollection.userInterfaceIdiom == .pad
+        if portrait && !pad.isHidden && !tablet {
             let controls = min(max(bounds.height * 0.36, 260), 360)
             let surfaceHeight = max(bounds.height - controls - safeAreaInsets.bottom * 0.3, bounds.height * 0.45)
             surface.frame = CGRect(x: 0, y: 0, width: bounds.width, height: surfaceHeight)

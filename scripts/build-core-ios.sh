@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="${AZAHAR_SRC:-$ROOT/external/azahar}"
 FLAVOR="sideload"
 SDK="device"
-JOBS="$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+JOBS="$(sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN || echo 8)"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -65,9 +65,16 @@ cmake --build "$BUILD/cmake" --target azios -j "$JOBS"
 echo "==> Merging static libraries"
 mkdir -p "$BUILD/lib"
 LIBS=()
-while IFS= read -r lib; do LIBS+=("$lib"); done < <(
-  find "$BUILD/cmake" -name '*.a' ! -path '*/MoltenVK/*' ! -name 'libMoltenVK.a' | sort)
-libtool -static -no_warning_for_no_symbols -o "$BUILD/lib/libAzaharCore.a" "${LIBS[@]}" 2> >(grep -v "same member name" >&2 || true)
+LIB_LIST="${TMPDIR:-/tmp}/bifold-static-libs-$$.txt"
+LIBTOOL_LOG="${TMPDIR:-/tmp}/bifold-libtool-$$.log"
+trap 'rm -f "$LIB_LIST" "$LIBTOOL_LOG"' EXIT
+find "$BUILD/cmake" -name '*.a' ! -path '*/MoltenVK/*' ! -name 'libMoltenVK.a' | sort > "$LIB_LIST"
+while IFS= read -r lib; do LIBS+=("$lib"); done < "$LIB_LIST"
+if ! libtool -static -no_warning_for_no_symbols -o "$BUILD/lib/libAzaharCore.a" "${LIBS[@]}" 2>"$LIBTOOL_LOG"; then
+  cat "$LIBTOOL_LOG" >&2
+  exit 1
+fi
+grep -v "same member name" "$LIBTOOL_LOG" >&2 || true
 echo "    ${#LIBS[@]} libraries → $BUILD/lib/libAzaharCore.a ($(du -h "$BUILD/lib/libAzaharCore.a" | cut -f1))"
 
 echo "==> MoltenVK (dynamic framework, embedded in the app)"
